@@ -72,51 +72,31 @@ int main() {
   // Vertex Shader
   const char* vertex_shader =
     "#version 130\n"
-
     "in vec4 v_pos;"
-
+    "in vec2 tex_coord;"
     "out vec4 vs_color;"
-
+    "out vec2 vs_tex_coord;"
     "uniform mat4 mv_matrix;"
     "uniform mat4 proj_matrix;"
 
     "void main() {"
     "  gl_Position = proj_matrix * mv_matrix * v_pos;"
     "  vs_color = v_pos * 2.0 + vec4(0.4, 0.4, 0.4, 0.0);"
+    "  vs_tex_coord = tex_coord;"
     "}";
 
   // Fragment Shader
   const char* fragment_shader =
     "#version 130\n"
-
     "out vec4 frag_col;"
-
     "in vec4 vs_color;"
+    "in vec2 vs_tex_coord;"
+    "uniform sampler2D theTexture;"
 
     "void main() {"
     "  frag_col = vs_color;"
+    //"  frag_col = texture(theTexture, vs_tex_coord);"
     "}";
-
-  // // Vertex Shader
-  // const char* vertex_shader =
-  //   "#version 130\n"
-  //   "in vec3 v_pos;"
-  //   "in vec2 tex_coord;"
-  //   "out vec2 vs_tex_coord;"
-  //   "void main() {"
-  //   "  gl_Position = vec4(v_pos, 1.0);"
-  //   "  vs_tex_coord = tex_coord;"
-  //   "}";
-
-  // // Fragment Shader
-  // const char* fragment_shader =
-  //   "#version 130\n"
-  //   "out vec4 frag_col;"
-  //   "in vec2 vs_tex_coord;"
-  //   "uniform sampler2D theTexture;"
-  //   "void main() {"
-  //   "  frag_col = texture(theTexture, vs_tex_coord);"
-  //   "}";
 
   // Shaders compilation
   GLuint vs = glCreateShader(GL_VERTEX_SHADER);
@@ -199,10 +179,20 @@ int main() {
      0.25f,  0.25f, -0.25f  // 3
   };
 
-  // Vertex Buffer Object (for vertex coordinates)
-  GLuint vbo = 0;
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  float texCoords[] = {
+    0.0f, 0.0f,  // lower-left corner
+    1.0f, 1.0f,  // top-right corner
+    0.0f, 1.0f   // top-left corner
+  };
+  
+  // VAO, VBOs
+  GLuint vbo[2];
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(2, vbo);
+  glBindVertexArray(vao);
+
+  // VBO: 3D vertices
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_positions), vertex_positions, GL_STATIC_DRAW);
 
   // Vertex attributes
@@ -210,33 +200,15 @@ int main() {
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
   glEnableVertexAttribArray(0);
 
+  // VBO: Texture coords
+  glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW);
+  // 1: vertex texCoord attribute
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+  glEnableVertexAttribArray(1);
+
   // Unbind vbo (it was conveniently registered by VertexAttribPointer)
   glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-  // // VAO, VBOs
-  // GLuint vbo[2];
-  // glGenVertexArrays(1, &vao);
-  // glGenBuffers(2, vbo);
-
-  // glBindVertexArray(vao);
-
-  // // VBO: 3D vertices
-  // glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-  // glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
-  // // 0: vertex position attribute
-  // glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL);
-  // glEnableVertexAttribArray(0);
-
-  // // VBO: Texture coords
-  // glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-  // glBufferData(GL_ARRAY_BUFFER, sizeof(texCoords), texCoords, GL_STATIC_DRAW);
-  // // 1: vertex texCoord attribute
-  // glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-  // glEnableVertexAttribArray(1);
-
-  // // Unbind vbo (it was conveniently registered by VertexAttribPointer)
-  // glBindBuffer(GL_ARRAY_BUFFER, 0);
-
   // Unbind vao
   glBindVertexArray(0);
 
@@ -246,6 +218,35 @@ int main() {
   mv_location = glGetUniformLocation(shader_program, "mv_matrix");
   proj_location = glGetUniformLocation(shader_program, "proj_matrix");
 
+  // Create texture object
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+
+  // Set the texture wrapping/filtering options (on the currently bound texture object)
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  // Load image for texture
+  int width, height, nrChannels;
+  // Before loading the image, we flip it vertically because
+  // Images: 0.0 top of y-axis  OpenGL: 0.0 bottom of y-axis
+  stbi_set_flip_vertically_on_load(1);
+  unsigned char *data = stbi_load("watchmen_smiley.png", &width, &height, &nrChannels, 0);
+  // Image from https://es.wikipedia.org/wiki/Archivo:Watchmen_Smiley.svg
+  // CC-BY-SA 3.0
+  if (data) {
+    // Generate texture from image
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+  } else {
+    printf("Failed to load texture\n");
+  }
+
+  // Free image once texture is generated
+  stbi_image_free(data);
+
   // Render loop
   while(!glfwWindowShouldClose(window)) {
 
@@ -253,64 +254,18 @@ int main() {
 
     render(glfwGetTime());
 
+    // put the stuff we've been drawing onto the display
     glfwSwapBuffers(window);
 
+    // update other events like input handling
     glfwPollEvents();
   }
 
+  // close GL context and any other GLFW resources
   glfwTerminate();
 
   return 0;
 }
-
-//   // Create texture object
-//   glGenTextures(1, &texture);
-//   glBindTexture(GL_TEXTURE_2D, texture);
-
-//   // Set the texture wrapping/filtering options (on the currently bound texture object)
-//   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-//   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-//   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-//   // Load image for texture
-//   int width, height, nrChannels;
-//   // Before loading the image, we flip it vertically because
-//   // Images: 0.0 top of y-axis  OpenGL: 0.0 bottom of y-axis
-//   stbi_set_flip_vertically_on_load(1);
-//   unsigned char *data = stbi_load("watchmen_smiley.png", &width, &height, &nrChannels, 0);
-//   // Image from https://es.wikipedia.org/wiki/Archivo:Watchmen_Smiley.svg
-//   // CC-BY-SA 3.0
-//   if (data) {
-//     // Generate texture from image
-//     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-//     glGenerateMipmap(GL_TEXTURE_2D);
-//   } else {
-//     printf("Failed to load texture\n");
-//   }
-
-//   // Free image once texture is generated
-//   stbi_image_free(data);
-
-//   // Render loop
-//   while(!glfwWindowShouldClose(window)) {
-
-//     processInput(window);
-
-//     render();
-
-//     // put the stuff we've been drawing onto the display
-//     glfwSwapBuffers(window);
-
-//     // update other events like input handling
-//     glfwPollEvents();
-//   }
-
-//   // close GL context and any other GLFW resources
-//   glfwTerminate();
-
-//   return 0;
-// }
 
 void render(double currentTime) {
   float f = (float)currentTime * 0.3f;
