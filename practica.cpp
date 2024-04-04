@@ -81,7 +81,7 @@ int main() {
 
     "void main() {"
     "  gl_Position = proj_matrix * mv_matrix * v_pos;"
-    "  vs_color = v_pos * 2.0 + vec4(0.4, 0.4, 0.4, 0.0);"
+    "  vs_color = v_pos * 2.0 + vec4(0.4, 0.4, 0.4, 0.0);" //1.0
     "  vs_tex_coord = tex_coord;"
     "}";
 
@@ -94,8 +94,11 @@ int main() {
     "uniform sampler2D theTexture;"
 
     "void main() {"
-    "  frag_col = vs_color;"
-    //"  frag_col = texture(theTexture, vs_tex_coord);"
+    "  if (vs_tex_coord.x > 0.0) {"
+    "    frag_col = texture(theTexture, vs_tex_coord);"
+    "  } else {"
+    "    frag_col = vs_color;"
+    "  }"
     "}";
 
   // Shaders compilation
@@ -180,11 +183,15 @@ int main() {
   };
 
   float texCoords[] = {
-    0.0f, 0.0f,  // lower-left corner
-    1.0f, 1.0f,  // top-right corner
-    0.0f, 1.0f   // top-left corner
+    0.0f, 1.0f,  // 1
+    0.0f, 0.0f,  // 0
+    1.0f, 1.0f,  // 2
+
+    1.0f, 0.0f,  // 3
+    1.0f, 1.0f,  // 2
+    0.0f, 0.0f   // 0
   };
-  
+
   // VAO, VBOs
   GLuint vbo[2];
   glGenVertexArrays(1, &vao);
@@ -224,7 +231,7 @@ int main() {
 
   // Set the texture wrapping/filtering options (on the currently bound texture object)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); //GL_CLAMP_TO_BORDER
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
